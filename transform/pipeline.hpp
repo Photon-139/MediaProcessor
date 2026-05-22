@@ -9,7 +9,7 @@ class Pipeline{
         std::vector<std::unique_ptr<Effect>> effectPipeline;
     public:
         Pipeline(std::string effectPipeline);
-        void process(const Image& src, Image& dest);
+        void process(Image& bufferA, Image& bufferB);
 
         
 };
