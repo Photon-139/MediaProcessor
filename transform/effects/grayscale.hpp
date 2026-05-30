@@ -1,5 +1,4 @@
-#ifndef GRAYSCALE_H
-#define GRAYSCALE_H
+#pragma once
 
 #include "effect.hpp"
 
@@ -8,5 +7,3 @@ class GrayScale : Effect{
         GrayScale();
         void apply(const Image& src, Image& dest) const override;
 };
-
-#endif

@@ -1,11 +1,13 @@
+#pragma once
+
 #include <vector>
 #include <string>
 #include <unordered_map>
-
+#include "tcp_connection.hpp"
 
 class HttpRequest{
 public:
-    HttpRequest(int fd);
+    HttpRequest(TCPConnection conn);
     const std::vector<unsigned char>& file_bytes() const;
     std::string headers(const std::string& key);
     std::string pipeline() const;

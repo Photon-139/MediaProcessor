@@ -1,6 +1,4 @@
-#ifndef EFFECT_H
-#define EFFECT_H
-
+#pragma once
 #include <string>
 #include "../image.hpp"
 
@@ -17,5 +15,3 @@ class Effect{
 
         const std::string& getEffectName() const;
 };
-
-#endif

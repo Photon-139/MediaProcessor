@@ -1,6 +1,4 @@
-#ifndef PIPELINE_H
-#define PIPELINE_H
-
+#pragma once
 #include <effect.hpp>
 #include <memory>
 
@@ -13,5 +11,3 @@ class Pipeline{
 
         
 };
-
-#endif

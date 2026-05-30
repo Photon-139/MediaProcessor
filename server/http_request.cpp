@@ -1,13 +1,12 @@
-#ifndef HTTP_REQUEST_H
-#define HTTP_REQUEST_H
-
 #include "http_request.hpp"
+#include "tcp_connection.hpp"
 #include <sys/socket.h>
 #include <iostream>
 #include <cstring>
 #include <algorithm>
 
-HttpRequest::HttpRequest(int fd){
+HttpRequest::HttpRequest(TCPConnection conn){
+    int fd = conn.fd();
     unsigned char buffer[4096];
     std::vector<unsigned char> raw;
     while(1){
@@ -87,5 +86,3 @@ std::string HttpRequest::headers(const std::string& key){
 const std::vector<unsigned char>& HttpRequest::file_bytes() const{
     return file_bytes_;
 }
-
-#endif

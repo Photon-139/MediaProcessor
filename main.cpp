@@ -5,43 +5,21 @@
 #include <cstring>
 #include <fstream>
 #include "./server/http_request.hpp"
-
+#include "./server/tcp_server.hpp"
+#include "./server/tcp_connection.hpp"
 #define PORT 8080
 
 int main(){
-    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if(server_fd<0){
-        std::cout << "Error in creating socket" << std::endl;
-        exit(1);
-    }
-    sockaddr_in address;
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(PORT);
-    int opt = 1;
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        perror("setsockopt failed");
-        exit(1);
-    }
-    if(bind(server_fd, (sockaddr*)&address, sizeof(address))<0){
-        std::cout << "Bind failed" << std::endl;
-        exit(1);
-    }
 
-    if(listen(server_fd, 10)<0){
-        std::cout << "Listen failed" << std::endl;
-        exit(1);
-    }
+    TCPServer tcpServer = TCPServer(PORT);
+
     while(1){
-        std::cout << "Server waiting for connection on " << PORT << std::endl;
-        int client_socket = accept(server_fd, nullptr, nullptr);
-        if(client_socket<0){
-            std::cout << "Accept failed" << std::endl;
-            exit(1);
-        }
-        HttpRequest req = HttpRequest(client_socket);
-        
-
+        std::cout << "Server waiting for connection on port: " << PORT <<std::endl;
+        TCPConnection tcpConn = tcpServer.accept_conn();
+        HttpRequest req = HttpRequest(tcpConn);
+        std::cout << req.file_format() << std::endl;
+        std::cout << req.file_type() << std::endl;
+        std::cout << req.pipeline() << std::endl;
     }
 
 }
