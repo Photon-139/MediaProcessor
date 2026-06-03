@@ -7,13 +7,15 @@
 
 class HttpRequest{
 public:
-    HttpRequest(TCPConnection conn);
+    HttpRequest(const TCPConnection& conn);
     const std::vector<unsigned char>& file_bytes() const;
     std::string headers(const std::string& key);
     std::string pipeline() const;
     std::string file_format() const;
     std::string file_type() const;
+    bool isValid() const;
 private:
+    bool isValid_ = true;
     std::vector<unsigned char> file_bytes_;
     std::string pipeline_;
     std::string file_type_;

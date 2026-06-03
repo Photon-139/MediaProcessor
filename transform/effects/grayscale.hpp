@@ -2,7 +2,7 @@
 
 #include "effect.hpp"
 
-class GrayScale : Effect{
+class GrayScale : public Effect{
     public:
         GrayScale();
         void apply(const Image& src, Image& dest) const override;

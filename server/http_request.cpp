@@ -5,7 +5,7 @@
 #include <cstring>
 #include <algorithm>
 
-HttpRequest::HttpRequest(TCPConnection conn){
+HttpRequest::HttpRequest(const TCPConnection& conn){
     int fd = conn.fd();
     unsigned char buffer[4096];
     std::vector<unsigned char> raw;
@@ -13,14 +13,19 @@ HttpRequest::HttpRequest(TCPConnection conn){
         int bytes_received = recv(fd, buffer, sizeof(buffer), 0);
         if(bytes_received<=0){
             std::cout << "Connection closed or recv filed" << std::endl;
+            isValid_ = false;
             break;
         }
         raw.insert(raw.end(), buffer, buffer+bytes_received);
         if(std::search(raw.begin(), raw.end(), "\r\n\r\n", "\r\n\r\n"+4)!=raw.end()) break;
     }
+    if(!isValid_) return;
     auto header_boundary = std::search(raw.begin(), raw.end(), "\r\n\r\n", "\r\n\r\n"+4);
     std::string header_block(raw.begin(), header_boundary);
     parse_headers(header_block);
+
+    if(headers_["method"]=="OPTIONS") return;
+
     int cl = std::stoi(headers_["length"]);
 
     std::vector<unsigned char> body(header_boundary+4, raw.end());
@@ -39,14 +44,19 @@ void HttpRequest::parse_headers(const std::string& header_block){
     int path_len = header_block.find(" ", index+1)-(index+1);
     headers_["path"] = header_block.substr(index+1, path_len);
 
+
     int boundary_start = header_block.find("boundary");
-    int boundary_end = header_block.find("\r\n", boundary_start);
-    headers_["boundary"] = "--"+header_block.substr(boundary_start+9, boundary_end-boundary_start-9);
+    if(boundary_start!=std::string::npos){
+        int boundary_end = header_block.find("\r\n", boundary_start);
+        headers_["boundary"] = "--"+header_block.substr(boundary_start+9, boundary_end-boundary_start-9);
+    }
 
     int cl_start = header_block.find("Content-Length");
-    int cl_end = header_block.find("\r\n", cl_start);
-    int cl_len = cl_end - cl_start - 16;
-    headers_["length"] = header_block.substr(cl_start+16, cl_len);
+    if(cl_start!=std::string::npos){
+        int cl_end = header_block.find("\r\n", cl_start);
+        int cl_len = cl_end - cl_start - 16;
+        headers_["length"] = header_block.substr(cl_start+16, cl_len);
+    }
 }
 
 void HttpRequest::parse_body(const std::vector<unsigned char>& body_block){
@@ -85,4 +95,8 @@ std::string HttpRequest::headers(const std::string& key){
 
 const std::vector<unsigned char>& HttpRequest::file_bytes() const{
     return file_bytes_;
+}
+
+bool HttpRequest::isValid() const{
+    return isValid_;
 }
