@@ -53,9 +53,8 @@ int main(){
                 }
                 std::cout << "File response code " << file_response << std::endl;
             }
-            
-
         }
+        std::cout << "Connection closed" << std::endl;
     }
 
 }

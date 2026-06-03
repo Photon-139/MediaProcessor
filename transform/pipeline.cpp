@@ -4,11 +4,21 @@
 #include <memory>
 #include "../external/stb/stb_image.h"
 #include "../external/stb/stb_image_write.h"
+#include "effects/sepia.hpp"
+#include "effects/pixelate.hpp"
+#include "effects/invert.hpp"
 
 std::unique_ptr<Effect> make_effect(const std::string& name, const std::vector<std::string>& params){
     if(name=="grayscale"){
         return std::make_unique<GrayScale>();
-    }else{
+    }else if(name=="sepia"){
+        return std::make_unique<Sepia>();
+    }else if(name=="pixelate"){
+        return std::make_unique<Pixelate>(std::stoi(params[0]));
+    }else if(name=="invert"){
+        return std::make_unique<Invert>();
+    }
+    else{
         throw std::runtime_error("Unknown effect: "+name);
     }
 }

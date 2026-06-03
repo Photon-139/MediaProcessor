@@ -10,7 +10,10 @@ SRCS = main.cpp \
 		transform/pipeline.cpp \
 		transform/effects/effect.cpp \
 		external/stb/stb.cpp \
-		transform/effects/grayscale.cpp
+		transform/effects/grayscale.cpp \
+		transform/effects/sepia.cpp \
+		transform/effects/pixelate.cpp \
+		transform/effects/invert.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 
