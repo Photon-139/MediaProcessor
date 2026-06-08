@@ -7,8 +7,9 @@
 #include "effects/sepia.hpp"
 #include "effects/pixelate.hpp"
 #include "effects/invert.hpp"
+#include "audio_io.hpp"
 
-std::unique_ptr<Effect> make_effect(const std::string& name, const std::vector<std::string>& params){
+std::unique_ptr<ImageEffect> make_image_effect(const std::string& name, const std::vector<std::string>& params){
     if(name=="grayscale"){
         return std::make_unique<GrayScale>();
     }else if(name=="sepia"){
@@ -53,31 +54,44 @@ Pipeline::Pipeline(std::string pipeline_str, const std::string& file_type_, cons
                 }
             }
         }
-        effectPipeline.push_back(make_effect(effectName, effectParams));
+        if(file_type=="image"){
+            imagePipeline.push_back(make_image_effect(effectName, effectParams));
+        }else if(file_type=="audio"){
+
+        }
         if(end==std::string::npos) break;
         start = end+1;
     }
 }
 
 std::vector<unsigned char> Pipeline::process(const std::vector<unsigned char>& raw_file_bytes){
-    int width, height, channels;
-    unsigned char* raw_pixels = stbi_load_from_memory(raw_file_bytes.data(), raw_file_bytes.size(), &width, &height, &channels, 0);
+    if(file_type=="image"){
+        int width, height, channels;
+        unsigned char* raw_pixels = stbi_load_from_memory(raw_file_bytes.data(), raw_file_bytes.size(), &width, &height, &channels, 0);
+        
+        if(!raw_pixels){
+            throw std::runtime_error("Failed to load image");
+        }
+        
+        Image bufferA = Image(width, height, channels, raw_pixels);
+        stbi_image_free(raw_pixels);    
+        Image bufferB = Image(width, height, channels);
+         
     
-    if(!raw_pixels){
-        throw std::runtime_error("Failed to load image");
-    }
+        for(const auto& effect : imagePipeline){
+            effect->apply(bufferA, bufferB);
+            std::swap(bufferA, bufferB);        
+        }
     
-    Image bufferA = Image(width, height, channels, raw_pixels);
-    stbi_image_free(raw_pixels);    
-    Image bufferB = Image(width, height, channels);
-     
+        return encode_image(bufferA);
+    }else if(file_type=="audio"){
+        Audio buffA = AudioIO::decode_from_memory(raw_file_bytes);
+        Audio buffB(buffA.sample_rate, buffA.channels, buffA.frames);
 
-    for(const auto& effect : effectPipeline){
-        effect->apply(bufferA, bufferB);
-        std::swap(bufferA, bufferB);        
+        
     }
 
-    return encode_image(bufferA);
+    throw std::runtime_error("Unknown file type: "+file_type);
 }
 
 std::vector<unsigned char> Pipeline::encode_image(Image& img){

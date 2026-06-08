@@ -1,7 +1,7 @@
 #include "invert.hpp"
 #include <algorithm>
 
-Invert::Invert(): Effect("GrayScale"){}
+Invert::Invert(): ImageEffect("GrayScale"){}
 
 void Invert::apply(const Image& src, Image& dest) const{
     validateDimensions(src, dest);

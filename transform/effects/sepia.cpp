@@ -1,7 +1,7 @@
 #include "sepia.hpp"
 #include <algorithm>
 
-Sepia::Sepia(): Effect("Sepia"){}
+Sepia::Sepia(): ImageEffect("Sepia"){}
 
 void Sepia::apply(const Image& src, Image& dest) const{
     validateDimensions(src, dest);

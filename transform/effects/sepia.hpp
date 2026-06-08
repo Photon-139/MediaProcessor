@@ -2,7 +2,7 @@
 
 #include "effect.hpp"
 
-class Sepia : public Effect{
+class Sepia : public ImageEffect{
     public:
         Sepia();
         void apply(const Image& src, Image& dest) const override;

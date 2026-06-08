@@ -4,7 +4,7 @@
 
 class Pipeline{
     private:
-        std::vector<std::unique_ptr<Effect>> effectPipeline;
+        std::vector<std::unique_ptr<ImageEffect>> imagePipeline;
         std::string file_type;
         const std::string file_format;
         std::vector<unsigned char> encode_image(Image& img);

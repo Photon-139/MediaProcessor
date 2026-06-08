@@ -1,7 +1,7 @@
 #include "grayscale.hpp"
 #include <algorithm>
 
-GrayScale::GrayScale(): Effect("GrayScale"){}
+GrayScale::GrayScale(): ImageEffect("GrayScale"){}
 
 void GrayScale::apply(const Image& src, Image& dest) const{
     validateDimensions(src, dest);

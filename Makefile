@@ -13,12 +13,13 @@ SRCS = main.cpp \
 		transform/effects/grayscale.cpp \
 		transform/effects/sepia.cpp \
 		transform/effects/pixelate.cpp \
-		transform/effects/invert.cpp
+		transform/effects/invert.cpp \
+		transform/audio_io.cpp \
 
 OBJS = $(SRCS:.cpp=.o)
 
 $(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAG) -o $(TARGET) $(OBJS)
+	$(CXX) $(CXXFLAG) -o $(TARGET) $(OBJS) -lsndfile
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@

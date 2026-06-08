@@ -1,7 +1,7 @@
 #include "pixelate.hpp"
 #include <algorithm>
 
-Pixelate::Pixelate(size_t size): Effect("Pixelation"), block_size(size){}
+Pixelate::Pixelate(size_t size): ImageEffect("Pixelation"), block_size(size){}
 
 void Pixelate::apply(const Image& src, Image& dest) const{
     validateDimensions(src, dest);

@@ -2,7 +2,7 @@
 
 #include "effect.hpp"
 
-class Pixelate : public Effect{
+class Pixelate : public ImageEffect{
     private:
         size_t block_size;
     public:

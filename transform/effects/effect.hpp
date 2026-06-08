@@ -2,14 +2,14 @@
 #include <string>
 #include "../image.hpp"
 
-class Effect{
+class ImageEffect{
     protected:
         std::string effectName;
         void validateDimensions(const Image& src, const Image& dest) const;
     public:
-        Effect(const std::string& name);
+        ImageEffect(const std::string& name);
 
-        virtual ~Effect() = default;
+        virtual ~ImageEffect() = default;
         
         virtual void apply(const Image& src, Image& dest) const = 0;
 
