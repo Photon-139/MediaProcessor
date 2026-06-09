@@ -8,6 +8,8 @@
 #include "effects/pixelate.hpp"
 #include "effects/invert.hpp"
 #include "audio_io.hpp"
+#include "effects/audio_effect.hpp"
+#include "effects/reverse.hpp"
 
 std::unique_ptr<ImageEffect> make_image_effect(const std::string& name, const std::vector<std::string>& params){
     if(name=="grayscale"){
@@ -20,6 +22,13 @@ std::unique_ptr<ImageEffect> make_image_effect(const std::string& name, const st
         return std::make_unique<Invert>();
     }
     else{
+        throw std::runtime_error("Unknown effect: "+name);
+    }
+}
+std::unique_ptr<AudioEffect> make_audio_effect(const std::string& name, const std::vector<std::string>& params){
+    if(name=="reverse"){
+        return std::make_unique<Reverse>();
+    }else{
         throw std::runtime_error("Unknown effect: "+name);
     }
 }
@@ -57,7 +66,7 @@ Pipeline::Pipeline(std::string pipeline_str, const std::string& file_type_, cons
         if(file_type=="image"){
             imagePipeline.push_back(make_image_effect(effectName, effectParams));
         }else if(file_type=="audio"){
-
+            audioPipeline.push_back(make_audio_effect(effectName, effectParams));
         }
         if(end==std::string::npos) break;
         start = end+1;
@@ -86,9 +95,13 @@ std::vector<unsigned char> Pipeline::process(const std::vector<unsigned char>& r
         return encode_image(bufferA);
     }else if(file_type=="audio"){
         Audio buffA = AudioIO::decode_from_memory(raw_file_bytes);
-        Audio buffB(buffA.sample_rate, buffA.channels, buffA.frames);
+        Audio buffB(buffA.sample_rate, buffA.channels, buffA.frames, buffA.format);
+        for(const auto& effect : audioPipeline){
+            effect->apply(buffA, buffB);
+            std::swap(buffA, buffB);
+        }
 
-        
+        return AudioIO::encode_to_memory(buffA);
     }
 
     throw std::runtime_error("Unknown file type: "+file_type);

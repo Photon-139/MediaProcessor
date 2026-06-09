@@ -4,6 +4,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <sndfile.h>
+#include <iostream>
 
 namespace{
     struct ReadContext{
@@ -112,12 +113,12 @@ namespace AudioIO{
         if(!file){
             throw std::runtime_error("Failed to decode audio file");
         }
-        Audio audio_file(info.samplerate, info.channels, info.frames);
+        Audio audio_file(info.samplerate, info.channels, info.frames, info.format);
         sf_readf_float(file, audio_file.data.data(), info.frames);
         sf_close(file);
         return audio_file;
     }
-    std::vector<unsigned char> encode_to_memory(const Audio& audio_data, const int format){
+    std::vector<unsigned char> encode_to_memory(const Audio& audio_data){
         std::vector<unsigned char> output_buffer;
         output_buffer.reserve((audio_data.frames*audio_data.channels*2)+128);
 
@@ -130,14 +131,37 @@ namespace AudioIO{
         std::memset(&info, 0, sizeof(info));
         info.frames = audio_data.frames;
         info.channels = audio_data.channels;
-        info.format = format;
+        info.format = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
         info.samplerate = audio_data.sample_rate;
 
+        if (!sf_format_check(&info)) {
+            throw std::runtime_error("Invalid format: " + std::to_string(info.format));
+        }
         SNDFILE* output_file = sf_open_virtual(&vio, SFM_WRITE, &info, &ctx);
         if(!output_file){
             throw std::runtime_error("Failed to encode audio file");
         }
-        sf_writef_float(output_file, audio_data.data.data(), info.frames);
+        
+        sf_count_t frames_left = audio_data.frames;
+        sf_count_t total_written = 0;
+        const sf_count_t CHUNK_SIZE = 4096;
+        const float* current_ptr = audio_data.data.data();
+        while(frames_left>0){
+            sf_count_t frames_to_write = std::min(CHUNK_SIZE, frames_left);
+            sf_count_t written = sf_writef_float(output_file, current_ptr, frames_to_write);
+            if(written<=0){
+                std::cout << "\nCRITICAL ERROR: libsndfile aborted writing at frame " << total_written << std::endl;
+                std::cout << "Internal Error: " << sf_strerror(output_file) << std::endl;
+                break;
+            }
+            total_written+=written;
+            frames_left-=written;
+            current_ptr+=(written*audio_data.channels);
+        }
+
+
+
+        std::cout << "Encode successful, size of output buffer: " << output_buffer.size() << std::endl;
 
         sf_close(output_file);
         return output_buffer;

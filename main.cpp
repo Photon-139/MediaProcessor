@@ -37,7 +37,7 @@ int main(){
                             "HTTP/1.1 200 OK\r\n"
                             "Access-Control-Allow-Origin: *\r\n"
                             "Connection: keep-alive\r\n"    
-                            "Content-Type: " + req.file_type() + "/" + req.file_format() + "\r\n"
+                            "Content-Type: " + req.file_type() + "/" + (req.file_type()=="image" ?  req.file_format() : "wav") + "\r\n"
                             "Content-Length: " + std::to_string(res.size()) + "\r\n"
                             "\r\n";
                 int header_response = send(tcpConn.fd(), res_headers.data(), res_headers.size(), 0);
@@ -46,7 +46,13 @@ int main(){
                     std::cout << "Send failed: " << strerror(errno) << std::endl;
                     break;
                 }
-                int file_response = send(tcpConn.fd(), res.data(), res.size(), 0);
+                int bytes_sent = 0;
+                int file_response;
+                while(bytes_sent<res.size()){
+                    file_response = send(tcpConn.fd(), res.data()+bytes_sent, res.size()-bytes_sent, 0);
+                    if(file_response<0) break;
+                    bytes_sent+=file_response;
+                }
                 if(file_response<0){
                     std::cout << "Send failed: " << strerror(errno) << std::endl;
                     break;

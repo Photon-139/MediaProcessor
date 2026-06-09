@@ -15,6 +15,8 @@ SRCS = main.cpp \
 		transform/effects/pixelate.cpp \
 		transform/effects/invert.cpp \
 		transform/audio_io.cpp \
+		transform/effects/audio_effect.cpp \
+		transform/effects/reverse.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 
