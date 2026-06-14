@@ -17,7 +17,8 @@ SRCS = main.cpp \
 		transform/audio_io.cpp \
 		transform/effects/audio_effect.cpp \
 		transform/effects/reverse.cpp \
-		transform/effects/normalize.cpp
+		transform/effects/normalize.cpp \
+		transform/effects/gaussian_blur.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 
