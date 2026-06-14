@@ -10,6 +10,7 @@
 #include "audio_io.hpp"
 #include "effects/audio_effect.hpp"
 #include "effects/reverse.hpp"
+#include "effects/normalize.hpp"
 
 std::unique_ptr<ImageEffect> make_image_effect(const std::string& name, const std::vector<std::string>& params){
     if(name=="grayscale"){
@@ -28,7 +29,10 @@ std::unique_ptr<ImageEffect> make_image_effect(const std::string& name, const st
 std::unique_ptr<AudioEffect> make_audio_effect(const std::string& name, const std::vector<std::string>& params){
     if(name=="reverse"){
         return std::make_unique<Reverse>();
-    }else{
+    }else if(name=="normalize"){
+        return std::make_unique<Normalize>();
+    }
+    else{
         throw std::runtime_error("Unknown effect: "+name);
     }
 }
