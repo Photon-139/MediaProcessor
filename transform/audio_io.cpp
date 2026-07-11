@@ -4,7 +4,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <sndfile.h>
-#include <iostream>
+#include <spdlog/spdlog.h>
 
 namespace{
     struct ReadContext{
@@ -150,8 +150,8 @@ namespace AudioIO{
             sf_count_t frames_to_write = std::min(CHUNK_SIZE, frames_left);
             sf_count_t written = sf_writef_float(output_file, current_ptr, frames_to_write);
             if(written<=0){
-                std::cout << "\nCRITICAL ERROR: libsndfile aborted writing at frame " << total_written << std::endl;
-                std::cout << "Internal Error: " << sf_strerror(output_file) << std::endl;
+                spdlog::error("CRITICAL ERROR: libsndfile aborted writing at frame {}", total_written);
+                spdlog::error("Internal error: {}", sf_strerror(output_file));
                 break;
             }
             total_written+=written;
@@ -161,7 +161,8 @@ namespace AudioIO{
 
 
 
-        std::cout << "Encode successful, size of output buffer: " << output_buffer.size() << std::endl;
+        
+        spdlog::info("Encode successful, size of output buffer: ", output_buffer.size());
 
         sf_close(output_file);
         return output_buffer;

@@ -7,11 +7,11 @@ class ThreadPool{
 public:
     ThreadPool(int num_threads = std::thread::hardware_concurrency());
     ~ThreadPool();
-    void submit(std::function<void()> task);
+    void submit(std::move_only_function<void()> task);
     ThreadPool(const ThreadPool&) = delete;
     ThreadPool& operator=(const ThreadPool&) = delete;
 
 private:
-    SafeQueue<std::function<void()>> queue_;
+    SafeQueue<std::move_only_function<void()>> queue_;
     std::vector<std::thread> threads_;
 };

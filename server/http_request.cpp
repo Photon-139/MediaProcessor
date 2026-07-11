@@ -1,9 +1,11 @@
 #include "http_request.hpp"
 #include "tcp_connection.hpp"
 #include <sys/socket.h>
-#include <iostream>
 #include <cstring>
 #include <algorithm>
+#include <spdlog/spdlog.h>
+
+enum State {INCOMPLETE, COMPLETE, INVALID};
 
 HttpRequest::HttpRequest(const TCPConnection& conn){
     int fd = conn.fd();
@@ -12,7 +14,7 @@ HttpRequest::HttpRequest(const TCPConnection& conn){
     while(1){
         int bytes_received = recv(fd, buffer, sizeof(buffer), 0);
         if(bytes_received<=0){
-            std::cout << "Connection closed or recv filed" << std::endl;
+            spdlog::info("Connection closed or recv failed");
             isValid_ = false;
             break;
         }

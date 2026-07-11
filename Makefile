@@ -1,5 +1,6 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall
+CXXFLAGS = -std=c++23 -Wall -Iexternal/spdlog/include -pthread 
+LDFLAGS = -lsndfile
 
 TARGET = app
 
@@ -18,12 +19,13 @@ SRCS = main.cpp \
 		transform/effects/audio_effect.cpp \
 		transform/effects/reverse.cpp \
 		transform/effects/normalize.cpp \
-		transform/effects/gaussian_blur.cpp
+		transform/effects/gaussian_blur.cpp \
+		concurrency/thread_pool.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 
 $(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAG) -o $(TARGET) $(OBJS) -lsndfile
+	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS)
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@

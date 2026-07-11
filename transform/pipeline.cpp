@@ -1,4 +1,3 @@
-#include <iostream>
 #include "pipeline.hpp"
 #include "effects/grayscale.hpp"
 #include <memory>
@@ -12,6 +11,7 @@
 #include "effects/reverse.hpp"
 #include "effects/normalize.hpp"
 #include "effects/gaussian_blur.hpp"
+#include <stdexcept>
 
 std::unique_ptr<ImageEffect> make_image_effect(const std::string& name, const std::vector<std::string>& params){
     if(name=="grayscale"){
