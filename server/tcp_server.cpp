@@ -3,9 +3,13 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <stdexcept>
-#include <sys/epoll.h>
 #include <fcntl.h>
 #include <spdlog/spdlog.h>
+
+bool setNonBlocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    return (flags != -1) && (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0);
+}
 
 
 TCPServer::TCPServer(int port){
@@ -30,22 +34,10 @@ TCPServer::TCPServer(int port){
     if(listen(server_fd, 10)<0){
         throw std::runtime_error("Failed to listen on socket: " + std::to_string(server_fd));
     }
-
-    int flags = fcntl(fd_, F_GETFL, 0);    
-    if(flags==-1 || fcntl(fd_, F_SETFL, flags | O_NONBLOCK)==-1){
+    
+    if(!setNonBlocking(fd_)){
         throw std::runtime_error("Could not set the server fd to non-blocking");
     }
-
-    int epollFd = epoll_create1(0);
-    epoll_event ev{};
-    ev.events = EPOLLIN;
-    ev.data.fd = fd_;
-    epoll_ctl(epollFd, EPOLL_CTL_ADD, fd_, &ev);
-
-    struct timeval timeout;
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;
-    setsockopt(fd_, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 }
 
 TCPConnection TCPServer::accept_conn(){
@@ -56,9 +48,16 @@ TCPConnection TCPServer::accept_conn(){
         }
         throw std::runtime_error("Accept failed");
     }
+    if(!setNonBlocking(client_socket)){
+        throw std::runtime_error("Could not set the following socket to non-block: "+client_socket);
+    }
     return TCPConnection(client_socket);
 }
 
 TCPServer::~TCPServer(){
     close(fd_);
+}
+
+int TCPServer::fd() const{
+    return fd_;
 }

@@ -6,6 +6,7 @@ class TCPServer{
         TCPServer(int port);
         ~TCPServer();
         TCPConnection accept_conn();
+        int fd() const;
     private:
         int fd_;
 };
