@@ -49,7 +49,7 @@ TCPConnection TCPServer::accept_conn(){
         throw std::runtime_error("Accept failed");
     }
     if(!setNonBlocking(client_socket)){
-        throw std::runtime_error("Could not set the following socket to non-block: "+client_socket);
+        throw std::runtime_error("Could not set the following socket to non-block: "+std::to_string(client_socket));
     }
     return TCPConnection(client_socket);
 }

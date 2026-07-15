@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <spdlog/spdlog.h>
 
-void HttpRequest::feed(const char* buff, size_t length){
+void HttpRequest::feed(const unsigned char* buff, size_t length){
     if(state_==ParseState::COMPLETE || state_==ParseState::ERROR_STATE) return;
     buffer_.insert(buffer_.end(), buff, buff+length);
     
@@ -111,4 +111,15 @@ std::string HttpRequest::headers(const std::string& key){
 
 const std::vector<unsigned char>& HttpRequest::file_bytes() const{
     return file_bytes_;
+}
+
+void HttpRequest::reset() {
+    buffer_.clear();
+    state_ = ParseState::READING_HEADERS;
+    file_bytes_.clear();
+    pipeline_.clear();
+    file_type_.clear();
+    file_format_.clear();
+    headers_.clear();
+    body_start_offset_ = 0;
 }

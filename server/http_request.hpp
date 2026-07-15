@@ -16,7 +16,7 @@ class HttpRequest{
 public:
     HttpRequest() = default;
 
-    void feed(const char* data, size_t length);
+    void feed(const unsigned char* data, size_t length);
     ParseState state() const;
 
     std::string headers(const std::string& key);
@@ -24,6 +24,7 @@ public:
     std::string file_format() const;
     std::string file_type() const;
     const std::vector<unsigned char>& file_bytes() const;
+    void reset();
 private:
     std::vector<unsigned char> buffer_;
     ParseState state_ = ParseState::READING_HEADERS;
