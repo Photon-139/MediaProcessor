@@ -43,4 +43,11 @@ public:
         }
         cv_.notify_all();
     }
+    bool try_pop(T& popped_value){
+        std::lock_guard<std::mutex> lock(mtx_);
+        if(queue_.empty()) return false;
+        popped_value = std::move(queue_.front());
+        queue_.pop();
+        return true;
+    }
 };
