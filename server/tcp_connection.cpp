@@ -1,9 +1,9 @@
 #include "tcp_connection.hpp"
 #include <unistd.h>
 #include <algorithm>
+#include <cstdint>
 
-TCPConnection::TCPConnection(int fd){
-    fd_ = fd;
+TCPConnection::TCPConnection(int fd, uint64_t id) : fd_(fd), id_(id){
 }
 
 int TCPConnection::fd() const{
@@ -27,4 +27,12 @@ TCPConnection& TCPConnection::operator=(TCPConnection&& other) noexcept{
 
 HttpRequest& TCPConnection::request(){
     return request_;
+}
+
+HttpResponse& TCPConnection::response(){
+    return response_;
+}
+
+uint64_t TCPConnection::id() const{
+    return id_;
 }

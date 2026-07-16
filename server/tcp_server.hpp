@@ -9,4 +9,5 @@ class TCPServer{
         int fd() const;
     private:
         int fd_;
+        std::atomic<uint64_t> next_conn_id_{1};
 };

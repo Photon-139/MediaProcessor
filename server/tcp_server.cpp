@@ -44,14 +44,14 @@ TCPConnection TCPServer::accept_conn(){
     int client_socket = accept(fd_, nullptr, nullptr);
     if(client_socket<0){
         if(errno==EAGAIN || errno==EWOULDBLOCK){
-            return TCPConnection(-1);
+            return TCPConnection(-1, 0);
         }
         throw std::runtime_error("Accept failed");
     }
     if(!setNonBlocking(client_socket)){
         throw std::runtime_error("Could not set the following socket to non-block: "+std::to_string(client_socket));
     }
-    return TCPConnection(client_socket);
+    return TCPConnection(client_socket, next_conn_id_.fetch_add(1));
 }
 
 TCPServer::~TCPServer(){
