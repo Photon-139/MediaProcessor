@@ -1,6 +1,7 @@
 #include "http_response.hpp"
 #include <sys/socket.h>
 #include <stdexcept>
+#include <spdlog/spdlog.h>
 
 void HttpResponse::load(std::string&& headers, std::vector<unsigned char>&& body){
     headers_ = std::move(headers);
@@ -15,6 +16,7 @@ void HttpResponse::reset(){
 
 bool HttpResponse::write_some(int client_fd){
     size_t total_size = headers_.size() + file_bytes_.size();
+    if(bytes_sent_>=total_size) return true;
     while(bytes_sent_<total_size){
         if(bytes_sent_<headers_.size()){
             size_t remaining = headers_.size()-bytes_sent_;

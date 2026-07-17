@@ -1,5 +1,6 @@
 #pragma once
 #include "tcp_connection.hpp"
+#include <atomic>
 
 class TCPServer{
     public:

@@ -20,7 +20,8 @@ SRCS = main.cpp \
 		transform/effects/reverse.cpp \
 		transform/effects/normalize.cpp \
 		transform/effects/gaussian_blur.cpp \
-		concurrency/thread_pool.cpp
+		concurrency/thread_pool.cpp \
+		server/http_response.cpp \
 
 OBJS = $(SRCS:.cpp=.o)
 

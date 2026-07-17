@@ -22,10 +22,7 @@ constexpr int MAX_EVENTS = 10;
 constexpr int BUFFER_SIZE = 4096;
 constexpr int COMPUTE_THREADS = 10;
 
-bool setNonBlocking(int fd) {
-    int flags = fcntl(fd, F_GETFL, 0);
-    return (flags != -1) && (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0);
-}
+bool setNonBlocking(int fd);
 
 struct ComputeResult{
     int client_fd;
@@ -81,9 +78,11 @@ int main() {
                     if(epoll_ctl(epollFd, EPOLL_CTL_ADD, clientFd, &ev)==-1){
                         throw std::runtime_error("Faied to add the following socket to epoll: " + std::to_string(clientFd));
                     }
-                    clientMap[clientFd] = std::move(tcpConn);
+                    clientMap.emplace(clientFd, std::move(tcpConn));
+                    spdlog::info("Client accepts with fd: {}", clientFd);
                 }
             }else if(events[i].data.fd==efd){
+                spdlog::info("Event received for edf");
                 uint64_t count;
                 while (read(efd, &count, sizeof(count)) > 0);
                 ComputeResult cr;
@@ -98,32 +97,60 @@ int main() {
                     ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
                     ev.data.fd = cr.client_fd;
                     if(epoll_ctl(epollFd, EPOLL_CTL_MOD, cr.client_fd, &ev)==-1){
-                        spdlog::error("Failed to add to EPOLLOUT to fd {}: ", cr.client_fd, strerror(errno));
+                        spdlog::error("Failed to add to EPOLLOUT to fd {}: {}", cr.client_fd, strerror(errno));
                         continue;
                     }
+                    spdlog::info("fd: {} added to EPOLLOUT", cr.client_fd);
                 }
             }else{
+                bool disconnected = false;
+                int fd_ = events[i].data.fd;
                 if(events[i].events & EPOLLIN){
+                    spdlog::info("Receiving data on fd: {}", fd_);
                     while(1){
                         ssize_t n = recv(events[i].data.fd, buffer, sizeof(buffer), 0);
                         if(n==-1){
                             if(errno==EAGAIN || errno==EWOULDBLOCK) break;
                             // TODO: Handle actual socket error
-                            spdlog::error("recv failed on {}: {}", events[i].data.fd, strerror(errno));
+                            spdlog::error("recv failed on {}: {}", fd_, strerror(errno));
                             epoll_ctl(epollFd, EPOLL_CTL_DEL, events[i].data.fd, nullptr);
                             clientMap.erase(events[i].data.fd);
+                            disconnected = true;
                             break;
                         }
                         if(n==0){
+                            epoll_ctl(epollFd, EPOLL_CTL_DEL, events[i].data.fd, nullptr);
                             clientMap.erase(events[i].data.fd);
+                            disconnected = true;
                             break;
                         }
                         int clientFd = events[i].data.fd;
-                        auto& conn = clientMap[clientFd];
+                        auto it = clientMap.find(clientFd);
+                        if(it==clientMap.end()){
+                            spdlog::warn("Client with fd: {} register for EPOLLIN but absent from clientMap", fd_);
+                            // remove from epoll maybe
+                            break;
+                        }
+                        auto& conn = it->second;
                         auto& req = conn.request();
                         req.feed(buffer, n);
                         if(req.state()==ParseState::ERROR_STATE){
                             // Do something
+
+                            // Think about whether to close the connection or keep it alive 
+                            std::string body = "Bad Request";
+                            std::string headers =
+                                "HTTP/1.1 400 Bad Request\r\n"
+                                "Access-Control-Allow-Origin: *\r\n"
+                                "Connection: keep-alive\r\n"
+                                "Content-Type: text/plain\r\n"
+                                "Content-Length: " + std::to_string(body.size()) + "\r\n"
+                                "\r\n";
+                            conn.response().load(std::move(headers), std::vector<unsigned char>(body.begin(), body.end()));
+                            ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
+                            ev.data.fd = clientFd;
+                            epoll_ctl(epollFd, EPOLL_CTL_MOD, clientFd, &ev);
+                            req.reset();
                             break;
                         }
                         if(req.state()!=ParseState::COMPLETE) continue;
@@ -146,7 +173,7 @@ int main() {
                             std::string pipeline_str = req.pipeline();
                             std::string file_type = req.file_type();
                             std::string file_format = req.file_format();
-                            std::vector file_bytes = std::move(req.file_bytes());
+                            std::vector<unsigned char> file_bytes = std::move(req.file_bytes());
                             thread_pool.submit([
                                 clientFd,
                                 connId,
@@ -158,7 +185,9 @@ int main() {
                                 file_bytes = std::move(file_bytes)
                             ]() mutable {
                                 Pipeline pipeline(pipeline_str, file_type, file_format);
+                                spdlog::info("Pipeline with parameters constructed: {} {} {}", pipeline_str, file_type, file_format);
                                 std::vector<unsigned char> res_file_bytes = pipeline.process(file_bytes);
+                                spdlog::info("Request from client with fd {} processed, res_file_bytes: {}", clientFd, res_file_bytes.size());
                                     std::string res_headers =
                                         "HTTP/1.1 200 OK\r\n"
                                         "Access-Control-Allow-Origin: *\r\n"
@@ -172,35 +201,17 @@ int main() {
                                 write(efd, &signal_val, sizeof(signal_val));
                             });
                             req.reset();
-                        //     std::vector<unsigned char> res = pipeline.process(req.file_bytes());
-                        //     int header_response = send(clientFd, res_headers.data(), res_headers.size(), 0);
-                        //     spdlog::info("Header resposne code: {}", header_response);
-                        //     if(header_response < 0){
-                        //         spdlog::error("Send failed: {}", strerror(errno));
-                        //         break;
-                        //     }
-                        //     size_t bytes_sent = 0;
-                        //     ssize_t file_response;
-                        //     while(bytes_sent < res.size()){
-                        //         file_response = send(clientFd, res.data() + bytes_sent, static_cast<size_t>(res.size() - bytes_sent), 0);
-                        //         if (file_response < 0) break;
-                        //         bytes_sent += static_cast<size_t>(file_response);
-                        //     }
-                        //     if(file_response < 0){
-                        //         spdlog::error("Send failed: {}", strerror(errno));
-                        //         break;
-                        //     }
-                        //     spdlog::info("File response code: {}", file_response);
-                        //     req.reset();
                         }
                     }
                 } // Should this be an else-if or if
-                if(events[i].events & EPOLLOUT){
+                if(!disconnected && events[i].events & EPOLLOUT){
+                    spdlog::info("Sending the processing request on fd: {}", fd_);
                     auto it = clientMap.find(events[i].data.fd);
                     if(it==clientMap.end()){
-                        spdlog::warn("Client with fd: {} register for EPOLLOUT but absent from clientMap", events[i].data.fd);
+                        int fd_ = events[i].data.fd;
+                        spdlog::warn("Client with fd: {} register for EPOLLOUT but absent from clientMap", fd_);
                         // remove from epoll maybe
-                        continue;
+                        break;
                     }
                     auto& conn = it->second;
                     bool done = false;
@@ -213,6 +224,7 @@ int main() {
                         continue;
                     }
                     if(done){
+                        spdlog::info("Processed response sent back to the client at fd: {}", fd_);
                         conn.response().reset();
                         epoll_event mod_ev{};
                         mod_ev.events = EPOLLIN | EPOLLET;

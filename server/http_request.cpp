@@ -28,7 +28,13 @@ void HttpRequest::feed(const unsigned char* buff, size_t length){
                 break;
             }
             case ParseState::READING_BODY:{
-                int cl = std::stoi(headers_["length"]);
+                const std::string& len_str = headers_["length"];
+                int cl = 0;
+                auto [ptr, ec] = std::from_chars(len_str.data(), len_str.data() + len_str.size(), cl);
+                if (ec != std::errc{} || cl < 0) {
+                    state_ = ParseState::ERROR_STATE;
+                    return; // or however you currently bail into error state
+                }
                 if(buffer_.size()-body_start_offset_<static_cast<size_t>(cl)) return;
                 parse_body(buffer_.begin()+body_start_offset_, buffer_.begin()+body_start_offset_+cl);
                 state_ = ParseState::COMPLETE;
@@ -48,7 +54,7 @@ void HttpRequest::parse_headers(std::string_view header_block){
     headers_["path"] = header_block.substr(index+1, path_len);
 
 
-    int boundary_start = header_block.find("boundary");
+    auto boundary_start = header_block.find("boundary");
     if(boundary_start!=std::string_view::npos){
         int boundary_end = header_block.find("\r\n", boundary_start);
         std::string boundary = "--";
@@ -56,17 +62,17 @@ void HttpRequest::parse_headers(std::string_view header_block){
         headers_["boundary"] = std::move(boundary);
     }
 
-    int cl_start = header_block.find("Content-Length");
+    auto cl_start = header_block.find("Content-Length");
     if(cl_start!=std::string_view::npos){
         /* For review
             int cl_end = header_block.find("\r\n", cl_start);
             int cl_len = cl_end - cl_start - 16;
             headers_["length"] = header_block.substr(cl_start+16, cl_len);
         */
-       int colon_pos = header_block.find(":", cl_start);
-       int cl_end = header_block.find("\r\n", cl_start);
+       auto colon_pos = header_block.find(":", cl_start);
+       auto cl_end = header_block.find("\r\n", cl_start);
        if(colon_pos!=std::string_view::npos && cl_end!=std::string_view::npos){
-            int val_start = colon_pos+1;
+            auto val_start = colon_pos+1;
             while(val_start<cl_end && header_block[val_start]==' '){
                 val_start++;
             }
@@ -122,4 +128,8 @@ void HttpRequest::reset() {
     file_format_.clear();
     headers_.clear();
     body_start_offset_ = 0;
+}
+
+ParseState HttpRequest::state() const{
+    return state_;
 }
