@@ -129,6 +129,7 @@ int main() {
                         if(it==clientMap.end()){
                             spdlog::warn("Client with fd: {} register for EPOLLIN but absent from clientMap", fd_);
                             // remove from epoll maybe
+                            disconnected = true;
                             break;
                         }
                         auto& conn = it->second;
@@ -211,7 +212,7 @@ int main() {
                         int fd_ = events[i].data.fd;
                         spdlog::warn("Client with fd: {} register for EPOLLOUT but absent from clientMap", fd_);
                         // remove from epoll maybe
-                        break;
+                        continue;
                     }
                     auto& conn = it->second;
                     bool done = false;
