@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Media Transformer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto 1fr 1fr;
+    }
+
+    /* ── Toggle bar ── */
+    #toggle-bar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 1px solid #999;
+    }
+    #toggle-bar span { font-size: 13px; font-weight: bold; }
+    #toggle-bar button {
+      padding: 4px 14px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    #toggle-bar button.active {
+      background: #333;
+      color: #fff;
+      border-color: #333;
+    }
+
+    section {
+      border: 1px solid #999;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    h2 { font-size: 14px; font-weight: bold; }
+
+    /* ── Upload ── */
+    #drop-zone {
+      flex: 1;
+      border: 2px dashed #999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 13px;
+      color: #555;
+      position: relative;
+      overflow: hidden;
+      gap: 8px;
+    }
+    #drop-zone.drag-over { background: #f0f0f0; }
+    #drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    #upload-preview-img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: none;
+    }
+    #upload-preview-audio {
+      width: 90%;
+      display: none;
+    }
+    #upload-label { pointer-events: none; }
+
+    /* ── Result ── */
+    #result-placeholder {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: #999;
+      border: 1px dashed #ccc;
+    }
+    #result-img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: none;
+    }
+    #result-audio {
+      width: 100%;
+      display: none;
+    }
+    #download-btn { display: none; width: fit-content; }
+
+    /* ── Effect selection ── */
+    #effect-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    #param-panel {
+      border: 1px solid #ccc;
+      padding: 10px;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 13px;
+    }
+    #param-panel.visible { display: flex; }
+    #param-panel label { display: flex; flex-direction: column; gap: 4px; }
+    #param-panel input[type="range"] { width: 200px; }
+
+    /* ── Pipeline ── */
+    #pipeline-list {
+      flex: 1;
+      overflow-y: auto;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    #pipeline-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 8px;
+      border: 1px solid #ccc;
+      font-size: 13px;
+    }
+    #pipeline-list li button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      color: #c00;
+    }
+    #pipeline-actions { display: flex; gap: 8px; }
+    #apply-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    button { cursor: pointer; padding: 4px 10px; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+  <!-- TOGGLE BAR -->
+  <div id="toggle-bar">
+    <span>Mode:</span>
+    <button id="btn-image" class="active">Image</button>
+    <button id="btn-audio">Audio</button>
+  </div>
+
+  <!-- TOP LEFT: Upload -->
+  <section id="upload-section">
+    <h2 id="upload-title">Upload Image</h2>
+    <div id="drop-zone">
+      <input type="file" id="file-input" accept="image/*" />
+      <img id="upload-preview-img" alt="preview" />
+      <audio id="upload-preview-audio" controls></audio>
+      <span id="upload-label">Click or drag a file here</span>
+    </div>
+    <button id="clear-upload-btn">Clear</button>
+  </section>
+
+  <!-- TOP RIGHT: Result -->
+  <section id="result-section">
+    <h2>Result</h2>
+    <div id="result-placeholder">Result will appear here</div>
+    <img id="result-img" alt="result" />
+    <audio id="result-audio" controls></audio>
+    <a id="download-btn" download="result">
+      <button>Download</button>
+    </a>
+  </section>
+
+  <!-- BOTTOM LEFT: Effect Selection -->
+  <section id="effects-section">
+    <h2>Effects</h2>
+    <div id="effect-buttons"></div>
+    <div id="param-panel">
+      <strong id="param-title"></strong>
+      <!-- sliders injected here -->
+      <button id="param-add-btn">Add to Pipeline</button>
+      <button id="param-cancel-btn">Cancel</button>
+    </div>
+  </section>
+
+  <!-- BOTTOM RIGHT: Pipeline -->
+  <section id="pipeline-section">
+    <h2>Pipeline</h2>
+    <ol id="pipeline-list"></ol>
+    <div id="pipeline-actions">
+      <button id="apply-btn" disabled>Apply</button>
+      <button id="clear-pipeline-btn">Clear Pipeline</button>
+    </div>
+  </section>
+
+  <script>
+    const BACKEND_URL = "http://localhost:8080/transform";
+
+    const EFFECTS = {
+      image: [
+        { id: "grayscale", label: "Grayscale", params: [] },
+        { id: "sepia",     label: "Sepia",     params: [] },
+        { id: "invert",     label: "Invert",     params: [] },
+        { id: "pixelate",  label: "Pixelate",  params: [
+            { name: "blockSize", label: "Block Size", type: "range", min: 2, max: 64, default: 10 }
+        ]},
+        { id: "blur",      label: "Blur",      params: [
+            { name: "radius", label: "Radius", type: "range", min: 1, max: 20, default: 5 }
+        ]},
+      ],
+      audio: [
+        { id: "normalize", label: "Normalize", params: [] },
+        { id: "reverse",   label: "Reverse",   params: [] },
+        { id: "volume",    label: "Volume",     params: [
+            { name: "gain", label: "Gain", type: "range", min: 0, max: 4, default: 1 }
+        ]},
+      ],
+    };
+
+    // ── State ──────────────────────────────────────────────
+    let state = {
+      fileType: "image",     // "image" | "audio"
+      file: null,
+      pipeline: [],
+      pendingEffect: null,
+    };
+
+    // ── Element refs ───────────────────────────────────────
+    const btnImage           = document.getElementById("btn-image");
+    const btnAudio           = document.getElementById("btn-audio");
+
+    const fileInput          = document.getElementById("file-input");
+    const dropZone           = document.getElementById("drop-zone");
+    const uploadTitle        = document.getElementById("upload-title");
+    const uploadPreviewImg   = document.getElementById("upload-preview-img");
+    const uploadPreviewAudio = document.getElementById("upload-preview-audio");
+    const uploadLabel        = document.getElementById("upload-label");
+    const clearUploadBtn     = document.getElementById("clear-upload-btn");
+
+    const resultImg          = document.getElementById("result-img");
+    const resultAudio        = document.getElementById("result-audio");
+    const resultPlaceholder  = document.getElementById("result-placeholder");
+    const downloadBtn        = document.getElementById("download-btn");
+
+    const effectButtons      = document.getElementById("effect-buttons");
+    const paramPanel         = document.getElementById("param-panel");
+    const paramTitle         = document.getElementById("param-title");
+    const paramAddBtn        = document.getElementById("param-add-btn");
+    const paramCancelBtn     = document.getElementById("param-cancel-btn");
+
+    const pipelineList       = document.getElementById("pipeline-list");
+    const applyBtn           = document.getElementById("apply-btn");
+    const clearPipelineBtn   = document.getElementById("clear-pipeline-btn");
+
+    // ── Toggle ─────────────────────────────────────────────
+    btnImage.addEventListener("click", () => switchMode("image"));
+    btnAudio.addEventListener("click", () => switchMode("audio"));
+
+    function switchMode(type) {
+      if (state.fileType === type) return;
+      state.fileType = type;
+
+      // Reset everything
+      clearFile();
+      state.pipeline = [];
+      renderPipeline();
+      closeParamPanel();
+
+      // Update toggle button styles
+      btnImage.classList.toggle("active", type === "image");
+      btnAudio.classList.toggle("active", type === "audio");
+
+      // Update upload panel label
+      uploadTitle.textContent = type === "image" ? "Upload Image" : "Upload Audio";
+
+      // Update file input accept
+      fileInput.accept = type === "image" ? "image/*" : "audio/*";
+
+      // Re-render effect buttons for the new type
+      renderEffectButtons();
+    }
+
+    // ── Upload ─────────────────────────────────────────────
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files[0]) setFile(fileInput.files[0]);
+    });
+
+    dropZone.addEventListener("dragover", e => {
+      e.preventDefault();
+      dropZone.classList.add("drag-over");
+    });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.classList.remove("drag-over");
+      const f = e.dataTransfer.files[0];
+      if (!f) return;
+      const isImage = f.type.startsWith("image/");
+      const isAudio = f.type.startsWith("audio/");
+      if ((state.fileType === "image" && isImage) || (state.fileType === "audio" && isAudio)) {
+        setFile(f);
+      }
+    });
+
+    function setFile(f) {
+      state.file = f;
+      const url = URL.createObjectURL(f);
+      uploadLabel.style.display = "none";
+
+      if (state.fileType === "image") {
+        uploadPreviewImg.src = url;
+        uploadPreviewImg.style.display = "block";
+        uploadPreviewAudio.style.display = "none";
+      } else {
+        uploadPreviewAudio.src = url;
+        uploadPreviewAudio.style.display = "block";
+        uploadPreviewImg.style.display = "none";
+      }
+      refreshApplyBtn();
+    }
+
+    function clearFile() {
+      state.file = null;
+      fileInput.value = "";
+      uploadPreviewImg.src = "";
+      uploadPreviewImg.style.display = "none";
+      uploadPreviewAudio.src = "";
+      uploadPreviewAudio.style.display = "none";
+      uploadLabel.style.display = "";
+      refreshApplyBtn();
+    }
+
+    clearUploadBtn.addEventListener("click", clearFile);
+
+    // ── Effect buttons ─────────────────────────────────────
+    function renderEffectButtons() {
+      effectButtons.innerHTML = "";
+      closeParamPanel();
+      EFFECTS[state.fileType].forEach(effect => {
+        const btn = document.createElement("button");
+        btn.textContent = effect.label;
+        btn.addEventListener("click", () => onEffectClick(effect));
+        effectButtons.appendChild(btn);
+      });
+    }
+
+    function onEffectClick(effect) {
+      if (effect.params.length === 0) {
+        addToPipeline(effect, {});
+        return;
+      }
+      state.pendingEffect = effect;
+      paramTitle.textContent = effect.label;
+
+      paramPanel.querySelectorAll(".param-row").forEach(el => el.remove());
+
+      effect.params.forEach(p => {
+        const row = document.createElement("label");
+        row.className = "param-row";
+
+        const valueSpan = document.createElement("span");
+        valueSpan.textContent = p.default;
+        valueSpan.style.fontSize = "12px";
+        valueSpan.style.color = "#555";
+
+        const input = document.createElement("input");
+        input.type = p.type;
+        input.min = p.min;
+        input.max = p.max;
+        input.step = p.step ?? 1;
+        input.value = p.default;
+        input.dataset.name = p.name;
+        input.addEventListener("input", () => valueSpan.textContent = input.value);
+
+        row.appendChild(document.createTextNode(p.label + ": "));
+        row.appendChild(input);
+        row.appendChild(valueSpan);
+
+        paramPanel.insertBefore(row, paramAddBtn);
+      });
+
+      paramPanel.classList.add("visible");
+    }
+
+    paramAddBtn.addEventListener("click", () => {
+      if (!state.pendingEffect) return;
+      const params = {};
+      paramPanel.querySelectorAll("input[data-name]").forEach(input => {
+        params[input.dataset.name] = Number(input.value);
+      });
+      addToPipeline(state.pendingEffect, params);
+      closeParamPanel();
+    });
+
+    paramCancelBtn.addEventListener("click", closeParamPanel);
+
+    function closeParamPanel() {
+      paramPanel.classList.remove("visible");
+      state.pendingEffect = null;
+    }
+
+    // ── Pipeline ───────────────────────────────────────────
+    function addToPipeline(effect, params) {
+      state.pipeline.push({ id: effect.id, label: effect.label, params });
+      renderPipeline();
+    }
+
+    function renderPipeline() {
+      pipelineList.innerHTML = "";
+      state.pipeline.forEach((entry, i) => {
+        const li = document.createElement("li");
+
+        let summary = entry.label;
+        const paramKeys = Object.keys(entry.params);
+        if (paramKeys.length > 0) {
+          summary += " (" + paramKeys.map(k => `${k}: ${entry.params[k]}`).join(", ") + ")";
+        }
+
+        const span = document.createElement("span");
+        span.textContent = `${i + 1}. ${summary}`;
+
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "×";
+        removeBtn.title = "Remove";
+        removeBtn.addEventListener("click", () => {
+          state.pipeline.splice(i, 1);
+          renderPipeline();
+        });
+
+        li.appendChild(span);
+        li.appendChild(removeBtn);
+        pipelineList.appendChild(li);
+      });
+      refreshApplyBtn();
+    }
+
+    clearPipelineBtn.addEventListener("click", () => {
+      state.pipeline = [];
+      renderPipeline();
+    });
+
+    function refreshApplyBtn() {
+      applyBtn.disabled = !(state.file && state.pipeline.length > 0);
+    }
+
+    // ── Apply ──────────────────────────────────────────────
+    applyBtn.addEventListener("click", async () => {
+      if (!state.file || state.pipeline.length === 0) return;
+
+      applyBtn.disabled = true;
+      applyBtn.textContent = "Applying…";
+
+      // Clear previous result
+      resultImg.style.display = "none";
+      resultAudio.style.display = "none";
+      resultPlaceholder.style.display = "flex";
+      resultPlaceholder.textContent = "Processing…";
+      downloadBtn.style.display = "none";
+      
+      const pipelineStr = state.pipeline.map(entry => {
+        const paramValues = Object.values(entry.params);
+        if (paramValues.length === 0) {
+          return entry.id;
+        } else {
+          return `${entry.id}:${paramValues.join(",")}`;
+        }
+      }).join(";");
+
+      try {
+        const formData = new FormData();
+        formData.append("pipeline", pipelineStr);
+        // formData.append("fileType", state.fileType);
+        formData.append("file", state.file);
+
+        const response = await fetch(BACKEND_URL, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+
+        resultPlaceholder.style.display = "none";
+
+        if (state.fileType === "image") {
+          resultImg.src = url;
+          resultImg.style.display = "block";
+          downloadBtn.download = "result.png";
+        } else {
+          resultAudio.src = url;
+          resultAudio.style.display = "block";
+          downloadBtn.download = "result.wav";
+        }
+
+        downloadBtn.href = url;
+        downloadBtn.style.display = "block";
+
+      } catch (err) {
+        resultPlaceholder.style.display = "flex";
+        resultPlaceholder.textContent = `Error: ${err.message}`;
+        resultImg.style.display = "none";
+        resultAudio.style.display = "none";
+        downloadBtn.style.display = "none";
+      } finally {
+        applyBtn.disabled = false;
+        applyBtn.textContent = "Apply";
+        refreshApplyBtn();
+      }
+    });
+
+    // ── Init ───────────────────────────────────────────────
+    renderEffectButtons();
+  </script>
+</body>
+</html>
