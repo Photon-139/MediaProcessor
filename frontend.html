@@ -218,6 +218,13 @@
         { id: "blur",      label: "Blur",      params: [
             { name: "radius", label: "Radius", type: "range", min: 1, max: 20, default: 5 }
         ]},
+        {
+          id:"ordered_dithering", label: "Ordered Dithering", params:[
+            {
+              name: "n", label: "Matrix size",  type: "range", min: 2, max: 6, default: 2, powerOfTwo: true
+            }
+          ]
+        }
       ],
       audio: [
         { id: "normalize", label: "Normalize", params: [] },
@@ -370,7 +377,7 @@
         row.className = "param-row";
 
         const valueSpan = document.createElement("span");
-        valueSpan.textContent = p.default;
+        valueSpan.textContent = p.powerOfTwo ? Math.pow(2, p.default) : p.default;
         valueSpan.style.fontSize = "12px";
         valueSpan.style.color = "#555";
 
@@ -381,7 +388,10 @@
         input.step = p.step ?? 1;
         input.value = p.default;
         input.dataset.name = p.name;
-        input.addEventListener("input", () => valueSpan.textContent = input.value);
+        input.dataset.powerOfTwo = p.powerOfTwo ? "true" : "false";
+        input.addEventListener("input", () => {
+          valueSpan.textContent = p.powerOfTwo ? Math.pow(2, input.value) : input.value;
+        });
 
         row.appendChild(document.createTextNode(p.label + ": "));
         row.appendChild(input);
@@ -397,7 +407,8 @@
       if (!state.pendingEffect) return;
       const params = {};
       paramPanel.querySelectorAll("input[data-name]").forEach(input => {
-        params[input.dataset.name] = Number(input.value);
+        const val = Number(input.value);
+        params[input.dataset.name] = input.dataset.powerOfTwo === "true" ? Math.pow(2, val) : val;
       });
       addToPipeline(state.pendingEffect, params);
       closeParamPanel();

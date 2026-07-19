@@ -1,7 +1,6 @@
 #include "http_response.hpp"
 #include <sys/socket.h>
 #include <stdexcept>
-#include <spdlog/spdlog.h>
 
 void HttpResponse::load(std::string&& headers, std::vector<unsigned char>&& body){
     headers_ = std::move(headers);

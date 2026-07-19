@@ -2,7 +2,8 @@ CXX = g++
 CXXFLAGS = -std=c++23 -Wall -Iexternal/spdlog/include -pthread 
 LDFLAGS = -lsndfile
 
-TARGET = app
+BUILD_DIR = build
+TARGET = $(BUILD_DIR)/app
 
 SRCS = main.cpp \
 		server/http_request.cpp \
@@ -22,13 +23,15 @@ SRCS = main.cpp \
 		transform/effects/gaussian_blur.cpp \
 		concurrency/thread_pool.cpp \
 		server/http_response.cpp \
+		transform/effects/ordered_dithering.cpp
 
-OBJS = $(SRCS:.cpp=.o)
+OBJS = $(SRCS:%.cpp=$(BUILD_DIR)/%.o)
 
 $(TARGET): $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS)
 
-%.o: %.cpp
+$(BUILD_DIR)/%.o: %.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:

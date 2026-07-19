@@ -11,6 +11,7 @@
 #include "effects/reverse.hpp"
 #include "effects/normalize.hpp"
 #include "effects/gaussian_blur.hpp"
+#include "effects/ordered_dithering.hpp"
 #include <stdexcept>
 
 std::unique_ptr<ImageEffect> make_image_effect(const std::string& name, const std::vector<std::string>& params){
@@ -24,6 +25,8 @@ std::unique_ptr<ImageEffect> make_image_effect(const std::string& name, const st
         return std::make_unique<Invert>();
     }else if(name=="blur"){
         return std::make_unique<GaussianBlur>(std::stoi(params[0]));
+    }else if(name=="ordered_dithering"){
+        return std::make_unique<OrderedDithering>(std::stoi(params[0]));
     }
     else{
         throw std::runtime_error("Unknown effect: "+name);

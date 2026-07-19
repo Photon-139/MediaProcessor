@@ -206,7 +206,6 @@ int main() {
                     }
                 } // Should this be an else-if or if
                 if(!disconnected && events[i].events & EPOLLOUT){
-                    spdlog::info("Sending the processing request on fd: {}", fd_);
                     auto it = clientMap.find(events[i].data.fd);
                     if(it==clientMap.end()){
                         int fd_ = events[i].data.fd;
