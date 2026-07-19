@@ -12,9 +12,11 @@
 #include "effects/normalize.hpp"
 #include "effects/gaussian_blur.hpp"
 #include "effects/ordered_dithering.hpp"
+#include "effects/copy_image.hpp"
+#include "effects/floyd_steinberg.hpp"
 #include <stdexcept>
 
-std::unique_ptr<ImageEffect> make_image_effect(const std::string& name, const std::vector<std::string>& params){
+std::unique_ptr<ImageEffect> Pipeline::make_image_effect(const std::string& name, const std::vector<std::string>& params){
     if(name=="grayscale"){
         return std::make_unique<GrayScale>();
     }else if(name=="sepia"){
@@ -26,7 +28,10 @@ std::unique_ptr<ImageEffect> make_image_effect(const std::string& name, const st
     }else if(name=="blur"){
         return std::make_unique<GaussianBlur>(std::stoi(params[0]));
     }else if(name=="ordered_dithering"){
+        // imagePipeline.push_back(std::make_unique<CopyBuffer>());
         return std::make_unique<OrderedDithering>(std::stoi(params[0]));
+    }else if(name=="floyd_steinberg"){
+        return std::make_unique<FloydSteinberg>();
     }
     else{
         throw std::runtime_error("Unknown effect: "+name);

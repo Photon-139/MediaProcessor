@@ -23,7 +23,9 @@ SRCS = main.cpp \
 		transform/effects/gaussian_blur.cpp \
 		concurrency/thread_pool.cpp \
 		server/http_response.cpp \
-		transform/effects/ordered_dithering.cpp
+		transform/effects/ordered_dithering.cpp \
+		transform/effects/floyd_steinberg.cpp \
+		transform/effects/copy_image.cpp
 
 OBJS = $(SRCS:%.cpp=$(BUILD_DIR)/%.o)
 
