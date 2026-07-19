@@ -226,8 +226,20 @@
           ]
         },
         {
-          id: "floyd_steinberg", label: "Floyd Steinberg", params: []
-        }
+          id: "error_diffusion", label: "Error Diffusion", params: [
+            {
+              name: "algorithm", label: "Algorithm", type: "select", default: "floyd_steinberg",
+              options: [
+                { value: "floyd_steinberg", label: "Floyd-Steinberg" },
+                { value: "atkinson",        label: "Atkinson" },
+                { value: "jarvis",          label: "Jarvis-Judice-Ninke" }
+              ]
+            },
+            {
+              name: "levels", label: "Levels", type: "range", min: 2, max: 16, default: 2
+            }
+          ]
+        },
       ],
       audio: [
         { id: "normalize", label: "Normalize", params: [] },
@@ -378,27 +390,44 @@
       effect.params.forEach(p => {
         const row = document.createElement("label");
         row.className = "param-row";
-
-        const valueSpan = document.createElement("span");
-        valueSpan.textContent = p.powerOfTwo ? Math.pow(2, p.default) : p.default;
-        valueSpan.style.fontSize = "12px";
-        valueSpan.style.color = "#555";
-
-        const input = document.createElement("input");
-        input.type = p.type;
-        input.min = p.min;
-        input.max = p.max;
-        input.step = p.step ?? 1;
-        input.value = p.default;
-        input.dataset.name = p.name;
-        input.dataset.powerOfTwo = p.powerOfTwo ? "true" : "false";
-        input.addEventListener("input", () => {
-          valueSpan.textContent = p.powerOfTwo ? Math.pow(2, input.value) : input.value;
-        });
-
         row.appendChild(document.createTextNode(p.label + ": "));
-        row.appendChild(input);
-        row.appendChild(valueSpan);
+
+        if (p.type === "select") {
+          const select = document.createElement("select");
+          select.dataset.name = p.name;
+          select.className = "param-control";
+          
+          p.options.forEach(opt => {
+            const option = document.createElement("option");
+            option.value = opt.value;
+            option.textContent = opt.label;
+            if (opt.value === p.default) option.selected = true;
+            select.appendChild(option);
+          });
+          
+          row.appendChild(select);
+        } else {
+          const valueSpan = document.createElement("span");
+          valueSpan.textContent = p.powerOfTwo ? Math.pow(2, p.default) : p.default;
+          valueSpan.style.fontSize = "12px";
+          valueSpan.style.color = "#555";
+
+          const input = document.createElement("input");
+          input.type = p.type;
+          input.min = p.min;
+          input.max = p.max;
+          input.step = p.step ?? 1;
+          input.value = p.default;
+          input.dataset.name = p.name;
+          input.className = "param-control";
+          input.dataset.powerOfTwo = p.powerOfTwo ? "true" : "false";
+          input.addEventListener("input", () => {
+            valueSpan.textContent = p.powerOfTwo ? Math.pow(2, input.value) : input.value;
+          });
+
+          row.appendChild(input);
+          row.appendChild(valueSpan);
+        }
 
         paramPanel.insertBefore(row, paramAddBtn);
       });
@@ -409,9 +438,12 @@
     paramAddBtn.addEventListener("click", () => {
       if (!state.pendingEffect) return;
       const params = {};
-      paramPanel.querySelectorAll("input[data-name]").forEach(input => {
-        const val = Number(input.value);
-        params[input.dataset.name] = input.dataset.powerOfTwo === "true" ? Math.pow(2, val) : val;
+      paramPanel.querySelectorAll(".param-control[data-name]").forEach(control => {
+        let val = control.value;
+        if (!isNaN(val) && val.trim() !== "") {
+          val = Number(val);
+        }
+        params[control.dataset.name] = control.dataset.powerOfTwo === "true" ? Math.pow(2, val) : val;
       });
       addToPipeline(state.pendingEffect, params);
       closeParamPanel();

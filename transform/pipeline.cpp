@@ -30,8 +30,13 @@ std::unique_ptr<ImageEffect> Pipeline::make_image_effect(const std::string& name
     }else if(name=="ordered_dithering"){
         // imagePipeline.push_back(std::make_unique<CopyBuffer>());
         return std::make_unique<OrderedDithering>(std::stoi(params[0]));
-    }else if(name=="floyd_steinberg"){
-        return std::make_unique<FloydSteinberg>();
+    }else if(name=="error_diffusion"){
+        const std::string& variant = params[0];
+        int levels = params.size()>1 ? std::stoi(params[1]) : 2;
+        DiffusionKernel kernel = (variant=="atkinson") ? ATKINSON
+                            : (variant=="jarvis") ? JARVIS_JUDICE_NINKE
+                            : FLOYD_STEINBERG;
+        return std::make_unique<FloydSteinberg>(kernel, levels);
     }
     else{
         throw std::runtime_error("Unknown effect: "+name);
