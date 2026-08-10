@@ -136,6 +136,7 @@ int main() {
                         auto& req = conn.request();
                         req.feed(buffer, n);
                         if(req.state()==ParseState::ERROR_STATE){
+                            spdlog::error("Failed to parse request on fd: {}", fd_);
                             // Do something
 
                             // Think about whether to close the connection or keep it alive 
@@ -155,7 +156,16 @@ int main() {
                             break;
                         }
                         if(req.state()!=ParseState::COMPLETE) continue;
-                        std::string method = req.headers("method");
+
+                        auto method_opt = req.headers("method");
+                        if(!method_opt){
+                            // Send 400 bad request
+                            // Do something
+
+                            continue;
+                        }
+
+                        std::string method = *method_opt;
                         if(method=="OPTIONS"){
                             std::string preflight =
                                 "HTTP/1.1 204 No Content\r\n"
@@ -174,7 +184,7 @@ int main() {
                             std::string pipeline_str = req.pipeline();
                             std::string file_type = req.file_type();
                             std::string file_format = req.file_format();
-                            std::vector<unsigned char> file_bytes = std::move(req.file_bytes());
+                            std::vector<unsigned char> file_bytes = req.take_file_bytes();
                             thread_pool.submit([
                                 clientFd,
                                 connId,

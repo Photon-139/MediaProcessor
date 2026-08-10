@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <optional>
 
 enum class ParseState{
     READING_HEADERS,
@@ -18,11 +19,12 @@ public:
     void feed(const unsigned char* data, size_t length);
     ParseState state() const;
 
-    std::string headers(const std::string& key);
+    std::optional<std::string> headers(const std::string& key) const;
     std::string pipeline() const;
     std::string file_format() const;
     std::string file_type() const;
     const std::vector<unsigned char>& file_bytes() const;
+    std::vector<unsigned char> take_file_bytes();
     void reset();
 private:
     std::vector<unsigned char> buffer_;
@@ -32,7 +34,8 @@ private:
     std::string file_type_;
     std::string file_format_;
     std::unordered_map<std::string, std::string> headers_;
-    void parse_headers(std::string_view header_block);
-    void parse_body(std::vector<unsigned char>::const_iterator body_start, std::vector<unsigned char>::const_iterator body_end);
+    bool parse_headers(std::string_view header_block);
+    bool parse_body(std::vector<unsigned char>::const_iterator body_start, std::vector<unsigned char>::const_iterator body_end);
     size_t body_start_offset_ = 0;
+    size_t expected_body_size_ = 0;
 };

@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <spdlog/spdlog.h>
 
+static constexpr int MAX_BODY_BYTES = 50 * 1024 * 1024;
+
 void HttpRequest::feed(const unsigned char* buff, size_t length){
     if(state_==ParseState::COMPLETE || state_==ParseState::ERROR_STATE) return;
     buffer_.insert(buffer_.end(), buff, buff+length);
@@ -18,25 +20,51 @@ void HttpRequest::feed(const unsigned char* buff, size_t length){
                     reinterpret_cast<const char*>(buffer_.data()),
                     std::distance(buffer_.begin(), header_boundary)
                 );
-                parse_headers(header_view);
+                if(!parse_headers(header_view)){
+                    state_ = ParseState::ERROR_STATE;
+                    return;
+                }
                 body_start_offset_ = std::distance(buffer_.begin(), header_boundary)+4;
-                if(headers_["method"]=="OPTIONS"){
+
+                auto method_it = headers_.find("method");
+                if(method_it == headers_.end()){
+                    state_ = ParseState::ERROR_STATE;
+                    return;
+                }
+                if(method_it->second == "OPTIONS"){
                     state_ = ParseState::COMPLETE;
                     return;
                 }
-                state_ = ParseState::READING_BODY;
-                break;
-            }
-            case ParseState::READING_BODY:{
-                const std::string& len_str = headers_["length"];
+
+                auto length_it = headers_.find("length");
+                if(length_it==headers_.end()){
+                    state_ = ParseState::ERROR_STATE;
+                    return;
+                }
+                const std::string& len_str = length_it->second;
                 int cl = 0;
                 auto [ptr, ec] = std::from_chars(len_str.data(), len_str.data() + len_str.size(), cl);
                 if (ec != std::errc{} || cl < 0) {
                     state_ = ParseState::ERROR_STATE;
-                    return; // or however you currently bail into error state
+                    return;
                 }
-                if(buffer_.size()-body_start_offset_<static_cast<size_t>(cl)) return;
-                parse_body(buffer_.begin()+body_start_offset_, buffer_.begin()+body_start_offset_+cl);
+    
+                if(cl>MAX_BODY_BYTES){
+                    spdlog::error("Rejecting request: body size {} exceeds limit of {} bytes", cl, MAX_BODY_BYTES);
+                    state_ = ParseState::ERROR_STATE;
+                    return; 
+                }
+                expected_body_size_ = static_cast<size_t>(cl);
+                state_ = ParseState::READING_BODY;
+                break;
+            }
+            case ParseState::READING_BODY:{
+
+                if(buffer_.size()-body_start_offset_<expected_body_size_) return;
+                if(!parse_body(buffer_.begin()+body_start_offset_, buffer_.begin()+body_start_offset_+expected_body_size_)){
+                    state_ = ParseState::ERROR_STATE;
+                    return;
+                }
                 state_ = ParseState::COMPLETE;
                 return;
             }
@@ -47,55 +75,98 @@ void HttpRequest::feed(const unsigned char* buff, size_t length){
     }
 }
 
-void HttpRequest::parse_headers(std::string_view header_block){
-    int index = header_block.find(" ");
+bool HttpRequest::parse_headers(std::string_view header_block){
+    auto index = header_block.find(" ");
+    if(index==std::string_view::npos){
+        return false;
+    }
     headers_["method"] = header_block.substr(0, index);
-    int path_len = header_block.find(" ", index+1)-(index+1);
+
+    auto path = header_block.find(" ", index+1);
+    if(path==std::string_view::npos){
+        return false;
+    }
+    auto path_len = path-(index+1);
     headers_["path"] = header_block.substr(index+1, path_len);
 
 
-    auto boundary_start = header_block.find("boundary");
+    auto boundary_start = header_block.find("boundary=");
     if(boundary_start!=std::string_view::npos){
-        int boundary_end = header_block.find("\r\n", boundary_start);
+        auto boundary_end = header_block.find("\r\n", boundary_start);
+        if(boundary_end==std::string_view::npos){
+            return false;
+        }
         std::string boundary = "--";
+        if(boundary_start+9>=boundary_end){
+            return false;
+        }
         boundary.append(header_block.substr(boundary_start+9, boundary_end-boundary_start-9));
         headers_["boundary"] = std::move(boundary);
     }
 
     auto cl_start = header_block.find("Content-Length");
     if(cl_start!=std::string_view::npos){
-        /* For review
-            int cl_end = header_block.find("\r\n", cl_start);
-            int cl_len = cl_end - cl_start - 16;
-            headers_["length"] = header_block.substr(cl_start+16, cl_len);
-        */
        auto colon_pos = header_block.find(":", cl_start);
        auto cl_end = header_block.find("\r\n", cl_start);
-       if(colon_pos!=std::string_view::npos && cl_end!=std::string_view::npos){
+       if(colon_pos!=std::string_view::npos && cl_end!=std::string_view::npos && colon_pos<cl_end){
             auto val_start = colon_pos+1;
             while(val_start<cl_end && header_block[val_start]==' '){
                 val_start++;
             }
             headers_["length"] = header_block.substr(val_start, cl_end-val_start);
+       }else{
+        // Header not found or malformed
+            return false;
        }
     }
+    return true;
 }
 
-void HttpRequest::parse_body(std::vector<unsigned char>::const_iterator body_start, std::vector<unsigned char>::const_iterator body_end){
+bool HttpRequest::parse_body(std::vector<unsigned char>::const_iterator body_start, std::vector<unsigned char>::const_iterator body_end){
     auto pipeline_start = std::search(body_start, body_end, "\r\n\r\n", "\r\n\r\n"+4);
+    if(pipeline_start==body_end){
+        return false;
+    }
+    if(headers_.find("boundary")==headers_.end()){
+        return false;
+    }
     auto b = headers_["boundary"];
+
+    if (std::distance(pipeline_start, body_end) < 4) return false;
     auto pipeline_end = std::search(pipeline_start+4, body_end, "\r\n", "\r\n"+2);
+    if(pipeline_end==body_end){
+        return false;
+    }
     pipeline_ = std::string(pipeline_start+4, pipeline_end);
 
     auto ct_start = std::search(body_start, body_end, "Content-Type", "Content-Type"+12);
+    if(ct_start==body_end){
+        return false;
+    }
     auto ct_end = std::search(ct_start, body_end, "\r\n\r\n", "\r\n\r\n"+4);
+    if(ct_end==body_end){
+        return false;
+    }
     auto ct_space = std::search(ct_start, ct_end, " ", " "+1);
+    if(ct_space==ct_end){
+        return false;
+    }
     auto ct_slash = std::search(ct_start, ct_end, "/", "/"+1);
+    if(ct_slash==ct_end){
+        return false;
+    }
+    if(ct_slash<=ct_space+1) return false;
     file_type_ = std::string(ct_space+1, ct_slash);
     file_format_ = std::string(ct_slash+1, ct_end);
+    if (std::distance(ct_end, body_end) < 4) return false;
     auto bytes_start = ct_end+4;
     auto bytes_end = std::search(bytes_start, body_end, b.begin(), b.end());
+    if(bytes_end==body_end){
+        return false;
+    }
     file_bytes_ = std::vector<unsigned char>(bytes_start, bytes_end);
+
+    return true;
 }
 
 std::string HttpRequest::pipeline() const{
@@ -109,9 +180,10 @@ std::string HttpRequest::file_format() const{
     return file_format_;
 }
 
-std::string HttpRequest::headers(const std::string& key){
+std::optional<std::string> HttpRequest::headers(const std::string& key) const{
     auto it = headers_.find(key);
-    if (it == headers_.end()) throw std::runtime_error("Missing header: " + key);
+
+    if (it == headers_.end()) return std::nullopt;
     return it->second;
 }
 
@@ -128,8 +200,13 @@ void HttpRequest::reset() {
     file_format_.clear();
     headers_.clear();
     body_start_offset_ = 0;
+    expected_body_size_ = 0;
 }
 
 ParseState HttpRequest::state() const{
     return state_;
+}
+
+std::vector<unsigned char> HttpRequest::take_file_bytes(){
+    return std::move(file_bytes_);
 }
