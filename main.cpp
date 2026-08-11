@@ -22,8 +22,6 @@ constexpr int MAX_EVENTS = 10;
 constexpr int BUFFER_SIZE = 4096;
 constexpr int COMPUTE_THREADS = 10;
 
-bool setNonBlocking(int fd);
-
 struct ComputeResult{
     int client_fd;
     uint64_t conn_id;
@@ -44,14 +42,34 @@ int main() {
     TCPServer tcpServer = TCPServer(PORT);
     int serverFd = tcpServer.fd();
     int epollFd = epoll_create1(0);
+    if(epollFd<0){
+        spdlog::error("Failed to create epoll instance");
+        return 1;
+    }
+
     int efd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    if(efd<0){
+        close(epollFd);
+        spdlog::error("Failed to create eventfd");
+        return 1;
+    }
     epoll_event ev{};
     ev.events = EPOLLIN | EPOLLET;
     ev.data.fd = serverFd;
-    epoll_ctl(epollFd, EPOLL_CTL_ADD, serverFd, &ev);
+    if(epoll_ctl(epollFd, EPOLL_CTL_ADD, serverFd, &ev)==-1){
+        close(efd);
+        close(epollFd);
+        spdlog::error("Failed to add serverfd to epoll");
+        return 1;
+    }
     ev.data.fd = efd;
     ev.events = EPOLLIN | EPOLLET;
-    epoll_ctl(epollFd, EPOLL_CTL_ADD, efd, &ev);
+    if(epoll_ctl(epollFd, EPOLL_CTL_ADD, efd, &ev)==-1){
+        close(efd);
+        close(epollFd);
+        spdlog::error("Failed to add eventfd to epoll");
+        return 1;
+    }
     ThreadPool thread_pool(COMPUTE_THREADS);
     SafeQueue<ComputeResult> result_queue;
     
@@ -66,6 +84,14 @@ int main() {
 
     while(running){
         int numEvents = epoll_wait(epollFd, events.data(), MAX_EVENTS, -1);
+
+        if(numEvents==-1){
+            if(errno!=EINTR){
+                spdlog::error("epoll_wait failed: {}", strerror(errno));
+            }
+            // Other signals also fall here, consider how we handle them
+            continue;
+        }
         for(int i = 0; i<numEvents; ++i){
             if(events[i].data.fd==serverFd){
                 while(true){
@@ -76,15 +102,21 @@ int main() {
                     ev.events = EPOLLIN | EPOLLET;
                     ev.data.fd = clientFd;
                     if(epoll_ctl(epollFd, EPOLL_CTL_ADD, clientFd, &ev)==-1){
-                        throw std::runtime_error("Faied to add the following socket to epoll: " + std::to_string(clientFd));
+                        spdlog::error("Failed to add the following socket to epoll: {}", std::to_string(clientFd));
+                        continue;
                     }
                     clientMap.emplace(clientFd, std::move(tcpConn));
                     spdlog::info("Client accepts with fd: {}", clientFd);
                 }
             }else if(events[i].data.fd==efd){
-                spdlog::info("Event received for edf");
+                spdlog::info("Event received for efd");
                 uint64_t count;
-                while (read(efd, &count, sizeof(count)) > 0);
+                while(true){
+                    if(read(efd, &count, sizeof(count)) > 0) continue;
+                    if(errno == EAGAIN || errno == EWOULDBLOCK) break;
+                    spdlog::error("eventfd read failed: {}", strerror(errno));
+                    break;
+                }
                 ComputeResult cr;
                 while(result_queue.try_pop(cr)){
                     auto it = clientMap.find(cr.client_fd);
@@ -98,6 +130,8 @@ int main() {
                     ev.data.fd = cr.client_fd;
                     if(epoll_ctl(epollFd, EPOLL_CTL_MOD, cr.client_fd, &ev)==-1){
                         spdlog::error("Failed to add to EPOLLOUT to fd {}: {}", cr.client_fd, strerror(errno));
+                        epoll_ctl(epollFd, EPOLL_CTL_DEL, cr.client_fd, nullptr);
+                        clientMap.erase(it);
                         continue;
                     }
                     spdlog::info("fd: {} added to EPOLLOUT", cr.client_fd);
@@ -111,15 +145,18 @@ int main() {
                         ssize_t n = recv(events[i].data.fd, buffer, sizeof(buffer), 0);
                         if(n==-1){
                             if(errno==EAGAIN || errno==EWOULDBLOCK) break;
-                            // TODO: Handle actual socket error
                             spdlog::error("recv failed on {}: {}", fd_, strerror(errno));
-                            epoll_ctl(epollFd, EPOLL_CTL_DEL, events[i].data.fd, nullptr);
+                            if(epoll_ctl(epollFd, EPOLL_CTL_DEL, events[i].data.fd, nullptr)==-1){
+                                spdlog::error("Failed to remove fd: {} from epoll: {}", fd_, strerror(errno));
+                            }
                             clientMap.erase(events[i].data.fd);
                             disconnected = true;
                             break;
                         }
                         if(n==0){
-                            epoll_ctl(epollFd, EPOLL_CTL_DEL, events[i].data.fd, nullptr);
+                            if(epoll_ctl(epollFd, EPOLL_CTL_DEL, events[i].data.fd, nullptr)==-1){
+                                spdlog::error("Failed to remove fd: {} from epoll: {}", fd_, strerror(errno));
+                            }
                             clientMap.erase(events[i].data.fd);
                             disconnected = true;
                             break;
@@ -129,6 +166,9 @@ int main() {
                         if(it==clientMap.end()){
                             spdlog::warn("Client with fd: {} register for EPOLLIN but absent from clientMap", fd_);
                             // remove from epoll maybe
+                            if(epoll_ctl(epollFd, EPOLL_CTL_DEL, events[i].data.fd, nullptr)==-1){
+                                spdlog::error("Failed to remove fd: {} from epoll: {}", fd_, strerror(errno));
+                            }
                             disconnected = true;
                             break;
                         }
@@ -151,21 +191,25 @@ int main() {
                             conn.response().load(std::move(headers), std::vector<unsigned char>(body.begin(), body.end()));
                             ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
                             ev.data.fd = clientFd;
-                            epoll_ctl(epollFd, EPOLL_CTL_MOD, clientFd, &ev);
+                            if(epoll_ctl(epollFd, EPOLL_CTL_MOD, clientFd, &ev)==-1){
+                                spdlog::error("Failed to mod epoll for fd {}: {}", clientFd, strerror(errno));
+                                epoll_ctl(epollFd, EPOLL_CTL_DEL, clientFd, nullptr);
+                                clientMap.erase(clientFd);
+                                disconnected = true;
+                                break;
+                            }
                             req.reset();
                             break;
                         }
                         if(req.state()!=ParseState::COMPLETE) continue;
 
                         auto method_opt = req.headers("method");
-                        if(!method_opt){
-                            // Send 400 bad request
-                            // Do something
-
-                            continue;
-                        }
+                        
 
                         std::string method = *method_opt;
+                        // Technically shouldn't dereference but if we have reached this point without ERROR_STATE, headers will have method
+                        // Consider value_or but fine for now, no further discussion 
+
                         if(method=="OPTIONS"){
                             std::string preflight =
                                 "HTTP/1.1 204 No Content\r\n"
@@ -177,7 +221,13 @@ int main() {
                             conn.response().load(std::move(preflight), std::vector<unsigned char>{});
                             ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
                             ev.data.fd = clientFd;
-                            epoll_ctl(epollFd, EPOLL_CTL_MOD, clientFd, &ev);
+                            if(epoll_ctl(epollFd, EPOLL_CTL_MOD, clientFd, &ev)==-1){
+                                spdlog::error("Failed to mod epoll for fd {}: {}", clientFd, strerror(errno));
+                                epoll_ctl(epollFd, EPOLL_CTL_DEL, clientFd, nullptr);
+                                clientMap.erase(clientFd);
+                                disconnected = true;
+                                break;
+                            }
                             req.reset();
                         }else if(method=="POST"){
                             uint64_t connId = conn.id();
@@ -209,7 +259,9 @@ int main() {
                                     
                                 result_queue.push(ComputeResult{clientFd, connId, std::move(res_headers), std::move(res_file_bytes)});
                                 uint64_t signal_val = 1;
-                                write(efd, &signal_val, sizeof(signal_val));
+                                if(write(efd, &signal_val, sizeof(signal_val)) < 0 && errno != EAGAIN){
+                                    spdlog::error("eventfd write failed: {}", strerror(errno));
+                                }
                             });
                             req.reset();
                         }
@@ -220,7 +272,9 @@ int main() {
                     if(it==clientMap.end()){
                         int fd_ = events[i].data.fd;
                         spdlog::warn("Client with fd: {} register for EPOLLOUT but absent from clientMap", fd_);
-                        // remove from epoll maybe
+                        if(epoll_ctl(epollFd, EPOLL_CTL_DEL, events[i].data.fd, nullptr)==-1){
+                            spdlog::error("Failed to remove fd: {} from epoll: {}", fd_, strerror(errno));
+                        }
                         continue;
                     }
                     auto& conn = it->second;
@@ -229,7 +283,9 @@ int main() {
                         done = conn.response().write_some(conn.fd());
                     }catch(const std::exception& e){
                         spdlog::error("Write error on fd {}: {}", conn.fd(), e.what());
-                        epoll_ctl(epollFd, EPOLL_CTL_DEL, conn.fd(), nullptr);
+                        if(epoll_ctl(epollFd, EPOLL_CTL_DEL, conn.fd(), nullptr)==-1){
+                            spdlog::error("Failed to remove fd: {} from epoll: {}", conn.fd(), strerror(errno));
+                        }
                         clientMap.erase(it);
                         continue;
                     }
@@ -239,10 +295,13 @@ int main() {
                         epoll_event mod_ev{};
                         mod_ev.events = EPOLLIN | EPOLLET;
                         mod_ev.data.fd = conn.fd();
-                        epoll_ctl(epollFd, EPOLL_CTL_MOD, conn.fd(), &mod_ev);
+                        if(epoll_ctl(epollFd, EPOLL_CTL_MOD, conn.fd(), &mod_ev)==-1){
+                            spdlog::error("Failed to mod epoll for fd {}: {}", conn.fd(), strerror(errno));
+                            epoll_ctl(epollFd, EPOLL_CTL_DEL, conn.fd(), nullptr);
+                            clientMap.erase(it);
+                            continue;
+                        }
                     }
-                }else{
-                    // Do something if error
                 }
             }
         }
