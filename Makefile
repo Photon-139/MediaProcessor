@@ -1,5 +1,6 @@
 CXX = g++
-CXXFLAGS = -std=c++23 -Wall -Iexternal/spdlog/include -pthread 
+OPT ?= -O0 -g
+CXXFLAGS = -std=c++23 -Wall $(OPT) -Iexternal/spdlog/include -pthread 
 LDFLAGS = -lsndfile
 
 BUILD_DIR = build
@@ -37,4 +38,4 @@ $(BUILD_DIR)/%.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -rf $(BUILD_DIR)

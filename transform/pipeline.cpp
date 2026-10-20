@@ -137,6 +137,8 @@ std::vector<unsigned char> Pipeline::encode_image(Image& img){
     int res;
     if(file_format=="jpg" || file_format=="jpeg"){
         res = stbi_write_jpg_to_func(write_callback, &output, img.width, img.height, img.channels, img.data.data(), 100);
+    }else if(file_format=="png"){
+        res = stbi_write_png_to_func(write_callback, &output, img.width, img.height, img.channels, img.data.data(), img.width*img.channels);
     }
     if(!res){
         throw std::runtime_error("Failed to encode image");
