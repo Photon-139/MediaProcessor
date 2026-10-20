@@ -12,11 +12,13 @@ Most of the problems that one might face writing something like this are solved 
 - g++ with C++23 support
 - make
 - libsndfile
+- spdlog (header only version)
 
 **Install dependencies (Debian/Ubuntu):**
 ```bash
 sudo apt update
 sudo apt install g++ make libsndfile1-dev
+git clone --depth 1 https://github.com/gabime/spdlog.git external/spdlog
 ```
 
 **Build:**
@@ -26,7 +28,7 @@ make
 
 **Run:**
 ```bash
-./app
+./build/app
 ```
 
 ### Image effects implemented
